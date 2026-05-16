@@ -16,37 +16,22 @@ pip install flask --ignore-installed blinker
 # 2. CAN and robot tooling dependencies
 pip install python-can
 
-# 3. Bring up CAN interfaces — find devices by USB serial number via sysfs
+# 3. Bring up CAN interfaces — use /dev/serial/by-id symlinks (persistent by USB serial)
 #    Serial 205D307F3541 → can0  (first CANable2)
 #    Serial 208836774B34 → can1  (second CANable2)
 echo "Bringing up CAN interfaces..."
 
-find_tty_by_serial() {
-    local target_serial="$1"
-    for tty in /sys/class/tty/ttyACM*; do
-        serial_file="$tty/device/../../../serial"
-        if [ -f "$serial_file" ]; then
-            serial=$(cat "$serial_file" 2>/dev/null)
-            if [ "$serial" = "$target_serial" ]; then
-                echo "/dev/$(basename $tty)"
-                return 0
-            fi
-        fi
-    done
-    return 1
-}
+CANABLE0="/dev/serial/by-id/usb-Openlight_Labs_CANable2_b158aa7_github.com_normaldotcom_canable2.git_205D307F3541-if00"
+CANABLE1="/dev/serial/by-id/usb-Openlight_Labs_CANable2_b158aa7_github.com_normaldotcom_canable2.git_208836774B34-if00"
 
 bring_up_can() {
     local iface="$1"
-    local serial="$2"
-    local dev
-    dev=$(find_tty_by_serial "$serial")
-    if [ -z "$dev" ]; then
-        echo "  WARNING: no device found with serial $serial — is the CANable2 plugged in?"
+    local dev="$2"
+    if [ ! -e "$dev" ]; then
+        echo "  WARNING: $dev not found — is the CANable2 plugged in?"
         return 1
     fi
-    echo "  Found serial $serial → $dev"
-    pkill -f "slcand.*$(basename $dev)" 2>/dev/null || true
+    pkill -f "slcand.*$(basename $(readlink -f $dev))" 2>/dev/null || true
     sleep 0.3
     ip link delete "$iface" 2>/dev/null || true
     slcand -o -s8 -t hw -S 3000000 "$dev" "$iface"
@@ -55,8 +40,8 @@ bring_up_can() {
     echo "  $iface up ($dev)"
 }
 
-bring_up_can can0 205D307F3541
-bring_up_can can1 208836774B34
+bring_up_can can0 "$CANABLE0"
+bring_up_can can1 "$CANABLE1"
 
 echo "✅ Ready to rock! Don't forget to source ROS:"
 echo "source ~/ros2_ws/install/setup.bash"
