@@ -16,44 +16,47 @@ pip install flask --ignore-installed blinker
 # 2. CAN and robot tooling dependencies
 pip install python-can
 
-# 3. Pin CANable2 USB serial numbers to stable symlinks
-#    canable0 → serial 205D307F3541 (→ can0)
-#    canable1 → serial 208836774B34 (→ can1)
-echo "Writing udev rules for CANable2 adapters..."
-cat > /etc/udev/rules.d/99-canable.rules << 'EOF'
-SUBSYSTEM=="tty", ATTRS{idVendor}=="16d0", ATTRS{idProduct}=="117e", ATTRS{serial}=="205D307F3541", SYMLINK+="canable0"
-SUBSYSTEM=="tty", ATTRS{idVendor}=="16d0", ATTRS{idProduct}=="117e", ATTRS{serial}=="208836774B34", SYMLINK+="canable1"
-EOF
-udevadm control --reload-rules
-udevadm trigger
-
-# 4. Bring up CAN interfaces
+# 3. Bring up CAN interfaces — find devices by USB serial number via sysfs
+#    Serial 205D307F3541 → can0  (first CANable2)
+#    Serial 208836774B34 → can1  (second CANable2)
 echo "Bringing up CAN interfaces..."
 
-# Kill any stale slcand processes for our devices
-pkill -f "slcand.*canable0" 2>/dev/null || true
-pkill -f "slcand.*canable1" 2>/dev/null || true
-sleep 0.5
+find_tty_by_serial() {
+    local target_serial="$1"
+    for tty in /sys/class/tty/ttyACM*; do
+        serial_file="$tty/device/../../../serial"
+        if [ -f "$serial_file" ]; then
+            serial=$(cat "$serial_file" 2>/dev/null)
+            if [ "$serial" = "$target_serial" ]; then
+                echo "/dev/$(basename $tty)"
+                return 0
+            fi
+        fi
+    done
+    return 1
+}
 
-# can0 — first CANable2 (serial 205D307F3541)
-if [ -e /dev/canable0 ]; then
-    ip link delete can0 2>/dev/null || true
-    slcand -o -s8 -t hw -S 3000000 /dev/canable0 can0
-    ip link set can0 up
-    echo "  can0 up (/dev/canable0)"
-else
-    echo "  WARNING: /dev/canable0 not found — is the first CANable2 plugged in?"
-fi
+bring_up_can() {
+    local iface="$1"
+    local serial="$2"
+    local dev
+    dev=$(find_tty_by_serial "$serial")
+    if [ -z "$dev" ]; then
+        echo "  WARNING: no device found with serial $serial — is the CANable2 plugged in?"
+        return 1
+    fi
+    echo "  Found serial $serial → $dev"
+    pkill -f "slcand.*$(basename $dev)" 2>/dev/null || true
+    sleep 0.3
+    ip link delete "$iface" 2>/dev/null || true
+    slcand -o -s8 -t hw -S 3000000 "$dev" "$iface"
+    sleep 0.3
+    ip link set "$iface" up
+    echo "  $iface up ($dev)"
+}
 
-# can1 — second CANable2 (serial 208836774B34)
-if [ -e /dev/canable1 ]; then
-    ip link delete can1 2>/dev/null || true
-    slcand -o -s8 -t hw -S 3000000 /dev/canable1 can1
-    ip link set can1 up
-    echo "  can1 up (/dev/canable1)"
-else
-    echo "  WARNING: /dev/canable1 not found — is the second CANable2 plugged in?"
-fi
+bring_up_can can0 205D307F3541
+bring_up_can can1 208836774B34
 
 echo "✅ Ready to rock! Don't forget to source ROS:"
 echo "source ~/ros2_ws/install/setup.bash"
