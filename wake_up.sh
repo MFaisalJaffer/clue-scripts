@@ -23,10 +23,11 @@ echo "Bringing up CAN interfaces..."
 
 find_tty_by_serial() {
     local target="$1"
-    for dev in /dev/ttyACM*; do
-        serial=$(udevadm info "$dev" 2>/dev/null | awk -F= '/ID_SERIAL_SHORT/{print $2}')
+    for tty in /sys/class/tty/ttyACM*; do
+        serial_file="$(realpath $tty/device)/../serial"
+        serial=$(cat "$serial_file" 2>/dev/null)
         if [ "$serial" = "$target" ]; then
-            echo "$dev"
+            echo "/dev/$(basename $tty)"
             return 0
         fi
     done
