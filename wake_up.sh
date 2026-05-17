@@ -2,9 +2,35 @@
 
 export PATH=$PATH:/usr/sbin:/sbin
 
-# Locate ip command (installed above via iproute2)
-IP=$(command -v ip 2>/dev/null || find /usr/sbin /sbin /usr/bin /bin -name ip -type f 2>/dev/null | head -1)
-if [ -z "$IP" ]; then echo "ERROR: cannot find 'ip' — iproute2 may have failed to install"; exit 1; fi
+# Use Python to bring up network interfaces (avoids dependency on ip/iproute2)
+ifup() {
+    local iface="$1"
+    python3 -c "
+import socket, struct, fcntl
+SIOCGIFFLAGS, SIOCSIFFLAGS, IFF_UP = 0x8913, 0x8914, 0x1
+iface = b'$iface'
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+flags = struct.unpack_from('<H', fcntl.ioctl(s, SIOCGIFFLAGS, struct.pack('16sH', iface, 0)), 16)[0]
+fcntl.ioctl(s, SIOCSIFFLAGS, struct.pack('16sH', iface, flags | IFF_UP))
+s.close()
+print('  $iface is up')
+" 2>&1
+}
+
+ifdel() {
+    local iface="$1"
+    python3 -c "
+import socket, struct, fcntl
+SIOCSIFFLAGS, IFF_UP = 0x8914, 0x1
+iface = b'$iface'
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+try:
+    fcntl.ioctl(s, SIOCSIFFLAGS, struct.pack('16sH', iface, 0))
+except:
+    pass
+s.close()
+" 2>/dev/null || true
+}
 
 echo "🤖 Waking up the robot..."
 
@@ -52,10 +78,10 @@ bring_up_can() {
     echo "  Found serial $serial → $dev"
     pkill -f "slcand.*$(basename $dev)" 2>/dev/null || true
     sleep 0.3
-    $IP link delete "$iface" 2>/dev/null || true
+    ifdel "$iface"
     slcand -o -s8 -t hw -S 3000000 "$dev" "$iface"
     sleep 0.3
-    $IP link set "$iface" up
+    ifup "$iface"
     echo "  $iface up ($dev → $iface)"
 }
 
