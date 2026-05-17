@@ -16,32 +16,44 @@ pip install flask --ignore-installed blinker
 # 2. CAN and robot tooling dependencies
 pip install python-can
 
-# 3. Bring up CAN interfaces — use /dev/serial/by-id symlinks (persistent by USB serial)
+# 3. Bring up CAN interfaces — find ttyACM device by USB serial via udevadm
 #    Serial 205D307F3541 → can0  (first CANable2)
 #    Serial 208836774B34 → can1  (second CANable2)
 echo "Bringing up CAN interfaces..."
 
-CANABLE0="/dev/serial/by-id/usb-Openlight_Labs_CANable2_b158aa7_github.com_normaldotcom_canable2.git_205D307F3541-if00"
-CANABLE1="/dev/serial/by-id/usb-Openlight_Labs_CANable2_b158aa7_github.com_normaldotcom_canable2.git_208836774B34-if00"
+find_tty_by_serial() {
+    local target="$1"
+    for dev in /dev/ttyACM*; do
+        serial=$(udevadm info "$dev" 2>/dev/null | awk -F= '/ID_SERIAL_SHORT/{print $2}')
+        if [ "$serial" = "$target" ]; then
+            echo "$dev"
+            return 0
+        fi
+    done
+    return 1
+}
 
 bring_up_can() {
     local iface="$1"
-    local dev="$2"
-    if [ ! -e "$dev" ]; then
-        echo "  WARNING: $dev not found — is the CANable2 plugged in?"
+    local serial="$2"
+    local dev
+    dev=$(find_tty_by_serial "$serial")
+    if [ -z "$dev" ]; then
+        echo "  WARNING: no ttyACM device found with serial $serial — is the CANable2 plugged in?"
         return 1
     fi
-    pkill -f "slcand.*$(basename $(readlink -f $dev))" 2>/dev/null || true
+    echo "  Found serial $serial → $dev"
+    pkill -f "slcand.*$(basename $dev)" 2>/dev/null || true
     sleep 0.3
     ip link delete "$iface" 2>/dev/null || true
     slcand -o -s8 -t hw -S 3000000 "$dev" "$iface"
     sleep 0.3
     ip link set "$iface" up
-    echo "  $iface up ($dev)"
+    echo "  $iface up ($dev → $iface)"
 }
 
-bring_up_can can0 "$CANABLE0"
-bring_up_can can1 "$CANABLE1"
+bring_up_can can0 205D307F3541
+bring_up_can can1 208836774B34
 
 echo "✅ Ready to rock! Don't forget to source ROS:"
 echo "source ~/ros2_ws/install/setup.bash"
