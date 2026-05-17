@@ -79,7 +79,7 @@ bring_up_can() {
     pkill -f "slcand.*$(basename $dev)" 2>/dev/null || true
     sleep 0.3
     ifdel "$iface"
-    slcand -o -s8 -t hw -S 3000000 "$dev" "$iface"
+    slcand -o -s6 -t hw -S 3000000 "$dev" "$iface"
     sleep 0.3
     ifup "$iface"
     echo "  $iface up ($dev → $iface)"
