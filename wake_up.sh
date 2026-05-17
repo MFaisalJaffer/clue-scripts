@@ -1,5 +1,7 @@
 #!/bin/bash
 
+export PATH=$PATH:/usr/sbin:/sbin
+
 echo "🤖 Waking up the robot..."
 
 # 0. Install System Dependencies
@@ -46,10 +48,10 @@ bring_up_can() {
     echo "  Found serial $serial → $dev"
     pkill -f "slcand.*$(basename $dev)" 2>/dev/null || true
     sleep 0.3
-    /usr/sbin/ip link delete "$iface" 2>/dev/null || true
+    ip link delete "$iface" 2>/dev/null || true
     slcand -o -s8 -t hw -S 3000000 "$dev" "$iface"
     sleep 0.3
-    /usr/sbin/ip link set "$iface" up
+    ip link set "$iface" up
     echo "  $iface up ($dev → $iface)"
 }
 
