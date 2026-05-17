@@ -2,9 +2,9 @@
 
 export PATH=$PATH:/usr/sbin:/sbin
 
-# Locate ip command (path varies by environment)
+# Locate ip command (installed above via iproute2)
 IP=$(command -v ip 2>/dev/null || find /usr/sbin /sbin /usr/bin /bin -name ip -type f 2>/dev/null | head -1)
-if [ -z "$IP" ]; then echo "ERROR: cannot find 'ip' command"; exit 1; fi
+if [ -z "$IP" ]; then echo "ERROR: cannot find 'ip' — iproute2 may have failed to install"; exit 1; fi
 
 echo "🤖 Waking up the robot..."
 
@@ -13,7 +13,7 @@ echo "Installing system dependencies..."
 # Fix ROS 2 GPG key if needed
 curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
 apt-get update
-apt-get install -y libfmt-dev libcap-dev can-utils
+apt-get install -y libfmt-dev libcap-dev can-utils iproute2
 
 # 1. Fix the "blinker" conflict (Force reinstall)
 echo "Installing Python dependencies..."
