@@ -2,6 +2,10 @@
 
 export PATH=$PATH:/usr/sbin:/sbin
 
+# Locate ip command (path varies by environment)
+IP=$(command -v ip 2>/dev/null || find /usr/sbin /sbin /usr/bin /bin -name ip -type f 2>/dev/null | head -1)
+if [ -z "$IP" ]; then echo "ERROR: cannot find 'ip' command"; exit 1; fi
+
 echo "🤖 Waking up the robot..."
 
 # 0. Install System Dependencies
@@ -48,10 +52,10 @@ bring_up_can() {
     echo "  Found serial $serial → $dev"
     pkill -f "slcand.*$(basename $dev)" 2>/dev/null || true
     sleep 0.3
-    ip link delete "$iface" 2>/dev/null || true
+    $IP link delete "$iface" 2>/dev/null || true
     slcand -o -s8 -t hw -S 3000000 "$dev" "$iface"
     sleep 0.3
-    ip link set "$iface" up
+    $IP link set "$iface" up
     echo "  $iface up ($dev → $iface)"
 }
 
